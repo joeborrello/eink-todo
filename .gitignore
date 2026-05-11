@@ -1,0 +1,24 @@
+# PlatformIO
+.pio/
+.vscode/
+.clang_complete
+.gcc-flags.json
+
+# Local configuration (contains WiFi credentials)
+include/config_local.h
+
+# Build artifacts
+*.o
+*.elf
+*.bin
+*.hex
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python (for server)
+__pycache__/
+*.pyc
+venv/
+.env
