@@ -1,0 +1,25 @@
+[Unit]
+Description=Lisa's To-Do App (FastAPI/uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=lisa-tasks
+Group=lisa-tasks
+WorkingDirectory=/opt/lisa-tasks/server
+Environment="LISA_TASKS_DB=/var/lib/lisa-tasks/tasks.db"
+Environment="PATH=/opt/lisa-tasks/venv/bin"
+ExecStart=/opt/lisa-tasks/venv/bin/uvicorn app:app --host 127.0.0.1 --port 8765 --workers 1 --log-level info
+Restart=on-failure
+RestartSec=3
+
+# Hardening — this process only needs read access to /opt/lisa-tasks and
+# write access to /var/lib/lisa-tasks. Nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/lisa-tasks
+
+[Install]
+WantedBy=multi-user.target
