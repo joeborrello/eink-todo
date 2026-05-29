@@ -5,44 +5,38 @@
 #include <vector>
 
 /**
- * @brief Single checklist item
+ * @brief Single task item from the otta-backlog
  */
-struct ChecklistItem {
-    uint16_t id;
+struct TaskItem {
     String text;
-    bool checked;
+    String difficulty;  // "easy" | "medium" | "hard" | "" (null)
 };
 
 /**
- * @brief Complete checklist with metadata
+ * @brief Complete task list with streak counter
  */
-struct Checklist {
-    String title;
-    String updated_at;
-    std::vector<ChecklistItem> items;
-    uint8_t max_items = 20;  // Display limit (adjustable per screen size)
-    
+struct TaskList {
+    std::vector<TaskItem> items;  // from otta-backlog
+    int streak = 0;               // from otta-streak
+    uint8_t max_items = 20;
+
     void clear() {
-        title = "";
-        updated_at = "";
         items.clear();
+        streak = 0;
     }
 };
 
 /**
- * @brief Parse JSON string into Checklist struct
- * @param json Raw JSON string from server
- * @param checklist Output checklist object
+ * @brief Parse the double-encoded /tasks/api/state response into a TaskList
+ *
+ * The state endpoint returns a flat JSON object where each value is itself a
+ * JSON-encoded string, e.g.:
+ *   { "otta-streak": "4", "otta-backlog": "[{\"text\":\"...\",\"difficulty\":\"easy\"}]" }
+ *
+ * @param json  Raw JSON string from server
+ * @param list  Output TaskList object
  * @return true if parsing succeeded, false otherwise
  */
-bool parseChecklistJSON(const String& json, Checklist& checklist);
-
-/**
- * @brief Serialize toggle request to JSON
- * @param id Item ID to toggle
- * @param checked New checked state
- * @return JSON string for POST body
- */
-String createToggleJSON(uint16_t id, bool checked);
+bool parseStateJSON(const String& json, TaskList& list);
 
 #endif // CHECKLIST_MODEL_H

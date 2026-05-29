@@ -4,6 +4,7 @@
  */
 
 #include "wifi_manager.h"
+#include <WiFiClientSecure.h>
 
 WiFiManager::WiFiManager() 
     : state(WiFiState::DISCONNECTED)
@@ -101,7 +102,19 @@ HttpResponse WiFiManager::httpGet(const String& url, uint32_t timeoutMs) {
     
     Serial.printf("[HTTP] GET %s\n", url.c_str());
     
-    if (!http.begin(url)) {
+    bool beginOk = false;
+    WiFiClientSecure secureClient;
+    WiFiClient plainClient;
+
+    if (url.startsWith("https://")) {
+        // TODO: pin root CA for production use
+        secureClient.setInsecure();
+        beginOk = http.begin(secureClient, url);
+    } else {
+        beginOk = http.begin(plainClient, url);
+    }
+
+    if (!beginOk) {
         response.error = "Failed to begin HTTP connection";
         Serial.println("[HTTP] Error: Failed to begin connection");
         return response;
@@ -152,7 +165,19 @@ HttpResponse WiFiManager::httpPost(const String& url, const String& jsonPayload,
     Serial.printf("[HTTP] POST %s\n", url.c_str());
     Serial.printf("[HTTP] Payload: %s\n", jsonPayload.c_str());
     
-    if (!http.begin(url)) {
+    bool beginOk = false;
+    WiFiClientSecure secureClient;
+    WiFiClient plainClient;
+
+    if (url.startsWith("https://")) {
+        // TODO: pin root CA for production use
+        secureClient.setInsecure();
+        beginOk = http.begin(secureClient, url);
+    } else {
+        beginOk = http.begin(plainClient, url);
+    }
+
+    if (!beginOk) {
         response.error = "Failed to begin HTTP connection";
         Serial.println("[HTTP] Error: Failed to begin connection");
         return response;

@@ -29,12 +29,11 @@
 // ============================================================================
 
 #ifndef SERVER_URL
-#define SERVER_URL "http://192.168.1.100:5000"  // Change to your server IP
+#define SERVER_URL "https://droplet.josephborrello.com"
 #endif
 
-#define CHECKLIST_ENDPOINT "/api/checklist"
-#define TOGGLE_ENDPOINT "/api/toggle"
-#define UPDATE_ENDPOINT "/api/update"
+#define STATE_ENDPOINT  "/tasks/api/state"
+#define HEALTH_ENDPOINT "/tasks/api/health"
 
 #define HTTP_TIMEOUT_MS 10000  // 10 seconds
 
