@@ -34,4 +34,16 @@ struct TaskList {
  */
 bool parseStateJSON(const String& json, TaskList& list);
 
+/**
+ * @brief Serialize a TaskList back to the double-encoded string the server expects.
+ *
+ * The server stores otta-backlog as a JSON-encoded string (double-encoded).
+ * This produces the *inner* JSON array string — the caller wraps it in the
+ * PUT body as: {"value": <result>}
+ *
+ * @param list  Source TaskList
+ * @return      Inner JSON array string, e.g. "[{\"text\":\"...\",\"difficulty\":\"easy\"}]"
+ */
+String serializeBacklog(const TaskList& list);
+
 #endif // CHECKLIST_MODEL_H
