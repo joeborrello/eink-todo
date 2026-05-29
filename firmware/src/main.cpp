@@ -352,8 +352,28 @@ void handleTouch() {
         if (t.y >= boxY && t.y <= (boxY + CHECKBOX_SIZE)) {
           DEBUG_PRINTF("Touched item %d: %s\n", i, taskList.items[i].text.c_str());
 
-          // TODO: remove item from taskList, PUT updated otta-backlog to /tasks/api/list/otta-backlog
-          // For now, just re-render the display
+          // Remove the tapped item from the local list
+          taskList.items.erase(taskList.items.begin() + i);
+
+          // Reconnect WiFi and push the updated backlog to the server
+          setupWiFi();
+          if (wifiManager.isConnected()) {
+            String body = createBacklogJSON(taskList);
+            String url  = String(SERVER_URL) + LIST_ENDPOINT_PREFIX + "otta-backlog";
+            DEBUG_PRINTF("PUT %s  body=%s\n", url.c_str(), body.c_str());
+
+            HttpResponse resp = wifiManager.httpPut(url, body, HTTP_TIMEOUT_MS);
+            if (resp.success) {
+              DEBUG_PRINTLN("Backlog updated on server");
+            } else {
+              DEBUG_PRINTF("PUT failed: %s\n", resp.error.c_str());
+            }
+            wifiManager.disconnect();
+          } else {
+            DEBUG_PRINTLN("No WiFi — backlog update skipped");
+          }
+
+          // Re-render with the item removed
           renderTaskList();
           break;
         }

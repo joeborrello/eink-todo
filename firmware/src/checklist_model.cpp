@@ -42,3 +42,26 @@ bool parseStateJSON(const String& json, TaskList& list) {
     Serial.printf("Parsed %d tasks, streak=%d\n", (int)list.items.size(), list.streak);
     return true;
 }
+
+String createBacklogJSON(const TaskList& list) {
+    // Build a JSON array of task objects.
+    // The body sent to PUT /tasks/api/list/otta-backlog is the inner array
+    // string — NOT double-encoded.  The server validates it parses as JSON
+    // and stores it verbatim.
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+
+    for (const TaskItem& item : list.items) {
+        JsonObject obj = arr.add<JsonObject>();
+        obj["text"] = item.text;
+        if (item.difficulty.length() > 0) {
+            obj["difficulty"] = item.difficulty;
+        } else {
+            obj["difficulty"] = nullptr;  // preserve null for unknown difficulty
+        }
+    }
+
+    String out;
+    serializeJson(doc, out);
+    return out;
+}

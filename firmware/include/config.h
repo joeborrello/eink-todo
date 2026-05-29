@@ -32,8 +32,9 @@
 #define SERVER_URL "https://droplet.josephborrello.com"
 #endif
 
-#define STATE_ENDPOINT  "/tasks/api/state"
-#define HEALTH_ENDPOINT "/tasks/api/health"
+#define STATE_ENDPOINT       "/tasks/api/state"
+#define HEALTH_ENDPOINT      "/tasks/api/health"
+#define LIST_ENDPOINT_PREFIX "/tasks/api/list/"  // PUT /{key} to update a single KV entry
 
 #define HTTP_TIMEOUT_MS 10000  // 10 seconds
 

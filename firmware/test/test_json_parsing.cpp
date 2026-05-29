@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <unity.h>
+#include <ArduinoJson.h>
 #include "checklist_model.h"
 
 // ---------------------------------------------------------------------------
@@ -145,6 +146,80 @@ void test_parse_skip_empty_text() {
 }
 
 // ---------------------------------------------------------------------------
+// createBacklogJSON tests
+// ---------------------------------------------------------------------------
+
+// Round-trip: parse then re-serialize, verify JSON structure
+void test_create_backlog_json_roundtrip() {
+    String backlog = "[{\"text\":\"Buy milk\",\"difficulty\":\"easy\"},{\"text\":\"Fix bug\",\"difficulty\":\"hard\"}]";
+    String stateJson = makeStateJSON(backlog, 5);
+
+    TaskList list;
+    TEST_ASSERT_TRUE(parseStateJSON(stateJson, list));
+
+    String out = createBacklogJSON(list);
+
+    // Parse the output and verify it matches the original items
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, out);
+    TEST_ASSERT_EQUAL(DeserializationError::Ok, err.code());
+
+    JsonArray arr = doc.as<JsonArray>();
+    TEST_ASSERT_EQUAL(2, (int)arr.size());
+    TEST_ASSERT_EQUAL_STRING("Buy milk", arr[0]["text"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("easy",     arr[0]["difficulty"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("Fix bug",  arr[1]["text"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("hard",     arr[1]["difficulty"].as<const char*>());
+}
+
+// Empty list serializes to "[]"
+void test_create_backlog_json_empty() {
+    TaskList list;
+    String out = createBacklogJSON(list);
+    TEST_ASSERT_EQUAL_STRING("[]", out.c_str());
+}
+
+// Null/empty difficulty serializes as JSON null
+void test_create_backlog_json_null_difficulty() {
+    TaskList list;
+    TaskItem item;
+    item.text = "Walk dog";
+    item.difficulty = "";  // empty → null
+    list.items.push_back(item);
+
+    String out = createBacklogJSON(list);
+
+    JsonDocument doc;
+    TEST_ASSERT_EQUAL(DeserializationError::Ok, deserializeJson(doc, out).code());
+    JsonArray arr = doc.as<JsonArray>();
+    TEST_ASSERT_EQUAL(1, (int)arr.size());
+    TEST_ASSERT_EQUAL_STRING("Walk dog", arr[0]["text"].as<const char*>());
+    TEST_ASSERT_TRUE(arr[0]["difficulty"].isNull());
+}
+
+// After erasing an item the serialized output has one fewer entry
+void test_create_backlog_json_after_erase() {
+    String backlog = "[{\"text\":\"Task A\",\"difficulty\":\"easy\"},{\"text\":\"Task B\",\"difficulty\":\"medium\"},{\"text\":\"Task C\",\"difficulty\":\"hard\"}]";
+    String stateJson = makeStateJSON(backlog, 1);
+
+    TaskList list;
+    TEST_ASSERT_TRUE(parseStateJSON(stateJson, list));
+    TEST_ASSERT_EQUAL(3, (int)list.items.size());
+
+    // Erase the first item (simulating a touch dismiss)
+    list.items.erase(list.items.begin());
+
+    String out = createBacklogJSON(list);
+
+    JsonDocument doc;
+    TEST_ASSERT_EQUAL(DeserializationError::Ok, deserializeJson(doc, out).code());
+    JsonArray arr = doc.as<JsonArray>();
+    TEST_ASSERT_EQUAL(2, (int)arr.size());
+    TEST_ASSERT_EQUAL_STRING("Task B", arr[0]["text"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("Task C", arr[1]["text"].as<const char*>());
+}
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 
@@ -161,6 +236,11 @@ void setup() {
     RUN_TEST(test_parse_empty_backlog);
     RUN_TEST(test_parse_missing_streak);
     RUN_TEST(test_parse_skip_empty_text);
+
+    RUN_TEST(test_create_backlog_json_roundtrip);
+    RUN_TEST(test_create_backlog_json_empty);
+    RUN_TEST(test_create_backlog_json_null_difficulty);
+    RUN_TEST(test_create_backlog_json_after_erase);
 
     UNITY_END();
 }
