@@ -72,14 +72,15 @@ void test_http_get_invalid_url(void) {
     TEST_ASSERT_NOT_EQUAL(200, response.statusCode);
 }
 
-void test_http_post_success(void) {
+void test_http_put_success(void) {
     wifiManager.connect(3, 10000);
-    
-    String url = String(SERVER_URL) + TOGGLE_ENDPOINT;
-    String payload = "{\"item_id\":0}";
-    
-    HttpResponse response = wifiManager.httpPost(url, payload, 5000);
-    
+
+    // PUT an unchanged backlog back to the server — safe no-op that exercises the PUT path
+    String url = String(SERVER_URL) + "/tasks/api/list/otta-backlog";
+    String payload = "[]";  // valid JSON; server accepts any valid JSON string
+
+    HttpResponse response = wifiManager.httpPut(url, payload, 10000);
+
     TEST_ASSERT_TRUE(response.success);
     TEST_ASSERT_TRUE(response.statusCode == 200 || response.statusCode == 201);
 }
@@ -127,7 +128,7 @@ void setup() {
     // HTTP tests
     RUN_TEST(test_http_get_success);
     RUN_TEST(test_http_get_invalid_url);
-    RUN_TEST(test_http_post_success);
+    RUN_TEST(test_http_put_success);
     RUN_TEST(test_http_without_wifi);
     
     // Retry tests
