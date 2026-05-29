@@ -335,24 +335,53 @@ void renderTaskList() {
 void handleTouch() {
   #if HAS_TOUCH
     touch.read();
-    
-    if (touch.isTouched && touch.touches > 0) {
-      TP_Point t = touch.points[0];
-      DEBUG_PRINTF("Touch: x=%d, y=%d\n", t.x, t.y);
-      
-      // Determine which task item was touched
-      for (uint8_t i = 0; i < taskList.items.size(); i++) {
-        int16_t itemY = 70 + (i * ITEM_HEIGHT);
-        int16_t boxY = itemY - CHECKBOX_SIZE + 5;
-        
-        if (t.y >= boxY && t.y <= (boxY + CHECKBOX_SIZE)) {
-          DEBUG_PRINTF("Touched item %d: %s\n", i, taskList.items[i].text.c_str());
-          
-          // TODO: remove item from taskList, PUT updated otta-backlog to /tasks/api/list/otta-backlog
-          // For now, just re-render the display
-          renderTaskList();
-          break;
+
+    if (!touch.isTouched || touch.touches == 0) return;
+
+    TP_Point t = touch.points[0];
+    DEBUG_PRINTF("Touch: x=%d, y=%d\n", t.x, t.y);
+
+    // Hit-test each item row (matches renderTaskList() layout)
+    for (uint8_t i = 0; i < taskList.items.size(); i++) {
+      int16_t itemY = 70 + (i * ITEM_HEIGHT);
+      int16_t boxY  = itemY - CHECKBOX_SIZE + 5;
+
+      if (t.y >= boxY && t.y <= (boxY + CHECKBOX_SIZE)) {
+        DEBUG_PRINTF("Completing item %d: %s\n", i, taskList.items[i].text.c_str());
+
+        // Remove the completed item
+        taskList.items.erase(taskList.items.begin() + i);
+
+        // Serialize remaining list (inner JSON array)
+        String innerJson = serializeBacklog(taskList);
+        DEBUG_PRINTF("Serialized backlog (%d bytes): %s\n", innerJson.length(), innerJson.c_str());
+
+        // Build PUT body: {"value": "<double-encoded string>"}
+        // The inner JSON must be escaped as a JSON string value
+        JsonDocument putDoc;
+        putDoc["value"] = innerJson;  // ArduinoJson handles escaping
+        String putBody;
+        serializeJson(putDoc, putBody);
+        DEBUG_PRINTF("PUT body: %s\n", putBody.c_str());
+
+        // Send update to server
+        setupWiFi();
+        if (wifiManager.isConnected()) {
+          String url = String(SERVER_URL) + "/tasks/api/list/otta-backlog";
+          HttpResponse resp = wifiManager.httpPut(url, putBody, HTTP_TIMEOUT_MS);
+          if (resp.success) {
+            DEBUG_PRINTLN("PUT succeeded — backlog updated on server");
+          } else {
+            DEBUG_PRINTF("PUT failed (%d): %s\n", resp.statusCode, resp.error.c_str());
+          }
+          wifiManager.disconnect();
+        } else {
+          DEBUG_PRINTLN("No WiFi — skipping PUT, local state updated only");
         }
+
+        // Re-render display
+        renderTaskList();
+        break;
       }
     }
   #endif

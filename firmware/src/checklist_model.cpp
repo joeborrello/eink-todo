@@ -40,3 +40,22 @@ bool parseStateJSON(const String& json, TaskList& list) {
     Serial.printf("Parsed %d tasks, streak=%d\n", (int)list.items.size(), list.streak);
     return true;
 }
+
+String serializeBacklog(const TaskList& list) {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+
+    for (const TaskItem& item : list.items) {
+        JsonObject obj = arr.add<JsonObject>();
+        obj["text"] = item.text;
+        if (item.difficulty.length() > 0) {
+            obj["difficulty"] = item.difficulty;
+        } else {
+            obj["difficulty"] = nullptr;  // preserve null for empty difficulty
+        }
+    }
+
+    String result;
+    serializeJson(doc, result);
+    return result;
+}

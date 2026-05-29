@@ -138,6 +138,71 @@ void test_parse_missing_streak() {
     TEST_ASSERT_EQUAL_INT(0, list.streak);
 }
 
+// Round-trip: parse then serialize should produce equivalent content
+void test_serialize_roundtrip() {
+    String backlog = R"([{"text":"Buy milk","difficulty":"easy"},{"text":"Write report","difficulty":"hard"}])";
+    String json = makeStateJSON(backlog, 3);
+
+    TaskList list;
+    TEST_ASSERT_TRUE(parseStateJSON(json, list));
+    TEST_ASSERT_EQUAL_INT(2, (int)list.items.size());
+
+    String serialized = serializeBacklog(list);
+
+    // Re-parse the serialized output
+    JsonDocument doc;
+    TEST_ASSERT_EQUAL(DeserializationError::Ok, deserializeJson(doc, serialized));
+    JsonArray arr = doc.as<JsonArray>();
+    TEST_ASSERT_EQUAL_INT(2, (int)arr.size());
+    TEST_ASSERT_EQUAL_STRING("Buy milk", arr[0]["text"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("easy",     arr[0]["difficulty"].as<const char*>());
+}
+
+// Serialize after removing an item
+void test_serialize_after_remove() {
+    String backlog = R"([{"text":"Task A","difficulty":"easy"},{"text":"Task B","difficulty":"medium"},{"text":"Task C","difficulty":"hard"}])";
+    String json = makeStateJSON(backlog, 0);
+
+    TaskList list;
+    TEST_ASSERT_TRUE(parseStateJSON(json, list));
+
+    // Remove middle item
+    list.items.erase(list.items.begin() + 1);
+    TEST_ASSERT_EQUAL_INT(2, (int)list.items.size());
+
+    String serialized = serializeBacklog(list);
+
+    JsonDocument doc;
+    TEST_ASSERT_EQUAL(DeserializationError::Ok, deserializeJson(doc, serialized));
+    JsonArray arr = doc.as<JsonArray>();
+    TEST_ASSERT_EQUAL_INT(2, (int)arr.size());
+    TEST_ASSERT_EQUAL_STRING("Task A", arr[0]["text"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("Task C", arr[1]["text"].as<const char*>());
+}
+
+// Serialize empty list produces "[]"
+void test_serialize_empty_list() {
+    TaskList list;
+    String serialized = serializeBacklog(list);
+    TEST_ASSERT_EQUAL_STRING("[]", serialized.c_str());
+}
+
+// Null difficulty round-trips as JSON null
+void test_serialize_null_difficulty() {
+    String backlog = R"([{"text":"Task A","difficulty":null}])";
+    String json = makeStateJSON(backlog, 0);
+
+    TaskList list;
+    TEST_ASSERT_TRUE(parseStateJSON(json, list));
+    TEST_ASSERT_EQUAL_STRING("", list.items[0].difficulty.c_str());
+
+    String serialized = serializeBacklog(list);
+
+    JsonDocument doc;
+    deserializeJson(doc, serialized);
+    TEST_ASSERT_TRUE(doc[0]["difficulty"].isNull());
+}
+
 // ============================================================================
 // Runner
 // ============================================================================
@@ -155,6 +220,10 @@ void setup() {
     RUN_TEST(test_parse_malformed_outer_json);
     RUN_TEST(test_parse_malformed_backlog_json);
     RUN_TEST(test_parse_missing_streak);
+    RUN_TEST(test_serialize_roundtrip);
+    RUN_TEST(test_serialize_after_remove);
+    RUN_TEST(test_serialize_empty_list);
+    RUN_TEST(test_serialize_null_difficulty);
 
     UNITY_END();
 }
