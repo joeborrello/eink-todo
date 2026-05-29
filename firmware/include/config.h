@@ -1,6 +1,6 @@
 /**
  * @file config.h
- * @brief Configuration template for e-ink checklist display
+ * @brief Configuration template for e-ink task display
  * 
  * Copy this to config_local.h and fill in your credentials.
  * config_local.h is gitignored.
@@ -29,12 +29,11 @@
 // ============================================================================
 
 #ifndef SERVER_URL
-#define SERVER_URL "http://192.168.1.100:5000"  // Change to your server IP
+#define SERVER_URL "https://droplet.josephborrello.com"
 #endif
 
-#define CHECKLIST_ENDPOINT "/api/checklist"
-#define TOGGLE_ENDPOINT "/api/toggle"
-#define UPDATE_ENDPOINT "/api/update"
+#define STATE_ENDPOINT  "/tasks/api/state"
+#define HEALTH_ENDPOINT "/tasks/api/health"
 
 #define HTTP_TIMEOUT_MS 10000  // 10 seconds
 
@@ -58,9 +57,9 @@
 // Display Configuration
 // ============================================================================
 
-// Checklist rendering
-#define MAX_CHECKLIST_ITEMS 20
-#define ITEM_HEIGHT 40  // Pixels per checklist item
+// Task list rendering
+#define MAX_TASK_ITEMS 20
+#define ITEM_HEIGHT 40  // Pixels per task item
 #define CHECKBOX_SIZE 30
 #define TEXT_MARGIN_LEFT 50
 #define TEXT_SIZE 2  // Adafruit GFX text size

@@ -54,13 +54,13 @@ void test_wifi_disconnect(void) {
 void test_http_get_success(void) {
     wifiManager.connect(3, 10000);
     
-    String url = String(SERVER_URL) + CHECKLIST_ENDPOINT;
+    String url = String(SERVER_URL) + STATE_ENDPOINT;
     HttpResponse response = wifiManager.httpGet(url, 5000);
     
     TEST_ASSERT_TRUE(response.success);
     TEST_ASSERT_EQUAL(200, response.statusCode);
     TEST_ASSERT_GREATER_THAN(0, response.body.length());
-    TEST_ASSERT_TRUE(response.body.indexOf("title") > 0);  // Should contain JSON
+    TEST_ASSERT_TRUE(response.body.indexOf("otta-backlog") > 0);  // Should contain state JSON
 }
 
 void test_http_get_invalid_url(void) {

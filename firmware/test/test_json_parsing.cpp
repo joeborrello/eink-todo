@@ -2,109 +2,160 @@
 #include <unity.h>
 #include "checklist_model.h"
 
-// Test valid JSON parsing
-void test_parse_valid_json() {
-    String json = R"({
-        "title": "Test Checklist",
-        "updated_at": "2025-05-10T12:00:00Z",
-        "items": [
-            {"id": 1, "text": "Task 1", "checked": true},
-            {"id": 2, "text": "Task 2", "checked": false}
-        ]
-    })";
-    
-    Checklist checklist;
-    bool result = parseChecklistJSON(json, checklist);
-    
+// ============================================================================
+// Helpers — build the double-encoded format the server actually sends
+// ============================================================================
+
+// Wrap a backlog JSON array and streak value into the outer KV object
+static String makeStateJSON(const String& backlogArray, int streak) {
+    // Outer values are JSON-encoded strings (the server double-encodes them)
+    String escaped = backlogArray;
+    escaped.replace("\"", "\\\"");
+    return "{\"otta-backlog\":\"" + escaped + "\",\"otta-streak\":\"" + String(streak) + "\"}";
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+// Basic happy-path: two tasks, one with difficulty, streak=3
+void test_parse_valid_state() {
+    String backlog = R"([{"text":"Buy milk","difficulty":"easy"},{"text":"Write report","difficulty":"hard"}])";
+    String json = makeStateJSON(backlog, 3);
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
     TEST_ASSERT_TRUE(result);
-    TEST_ASSERT_EQUAL_STRING("Test Checklist", checklist.title.c_str());
-    TEST_ASSERT_EQUAL(2, checklist.items.size());
-    TEST_ASSERT_EQUAL(1, checklist.items[0].id);
-    TEST_ASSERT_EQUAL_STRING("Task 1", checklist.items[0].text.c_str());
-    TEST_ASSERT_TRUE(checklist.items[0].checked);
-    TEST_ASSERT_FALSE(checklist.items[1].checked);
+    TEST_ASSERT_EQUAL_INT(3, list.streak);
+    TEST_ASSERT_EQUAL_INT(2, (int)list.items.size());
+    TEST_ASSERT_EQUAL_STRING("Buy milk",     list.items[0].text.c_str());
+    TEST_ASSERT_EQUAL_STRING("easy",         list.items[0].difficulty.c_str());
+    TEST_ASSERT_EQUAL_STRING("Write report", list.items[1].text.c_str());
+    TEST_ASSERT_EQUAL_STRING("hard",         list.items[1].difficulty.c_str());
 }
 
-// Test missing required fields
-void test_parse_missing_title() {
-    String json = R"({
-        "items": [
-            {"id": 1, "text": "Task 1", "checked": true}
-        ]
-    })";
-    
-    Checklist checklist;
-    bool result = parseChecklistJSON(json, checklist);
-    
-    TEST_ASSERT_FALSE(result);
+// Null difficulty field should map to empty string
+void test_parse_null_difficulty() {
+    String backlog = R"([{"text":"Task A","difficulty":null}])";
+    String json = makeStateJSON(backlog, 0);
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_INT(1, (int)list.items.size());
+    TEST_ASSERT_EQUAL_STRING("", list.items[0].difficulty.c_str());
 }
 
-// Test malformed JSON
-void test_parse_malformed_json() {
-    String json = R"({"title": "Test", "items": [{"id": 1, "text": "Task 1"})";  // Missing closing braces
-    
-    Checklist checklist;
-    bool result = parseChecklistJSON(json, checklist);
-    
-    TEST_ASSERT_FALSE(result);
+// Missing difficulty key should also map to empty string
+void test_parse_missing_difficulty() {
+    String backlog = R"([{"text":"Task B"}])";
+    String json = makeStateJSON(backlog, 0);
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_STRING("", list.items[0].difficulty.c_str());
 }
 
-// Test item truncation at max_items
+// Empty backlog array — valid, zero items
+void test_parse_empty_backlog() {
+    String json = makeStateJSON("[]", 5);
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_INT(5, list.streak);
+    TEST_ASSERT_EQUAL_INT(0, (int)list.items.size());
+}
+
+// Items with empty text should be skipped
+void test_parse_skips_empty_text() {
+    String backlog = R"([{"text":"","difficulty":"easy"},{"text":"Real task","difficulty":"medium"}])";
+    String json = makeStateJSON(backlog, 0);
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_INT(1, (int)list.items.size());
+    TEST_ASSERT_EQUAL_STRING("Real task", list.items[0].text.c_str());
+}
+
+// Truncation: more than max_items (20) should be capped
 void test_parse_truncate_items() {
-    String json = R"({
-        "title": "Long List",
-        "items": [)";
-    
-    // Generate 25 items (exceeds default max_items = 20)
+    String backlog = "[";
     for (int i = 1; i <= 25; i++) {
-        json += "{\"id\": " + String(i) + ", \"text\": \"Task " + String(i) + "\", \"checked\": false}";
-        if (i < 25) json += ",";
+        backlog += "{\"text\":\"Task " + String(i) + "\",\"difficulty\":\"easy\"}";
+        if (i < 25) backlog += ",";
     }
-    json += "]}";
-    
-    Checklist checklist;
-    bool result = parseChecklistJSON(json, checklist);
-    
+    backlog += "]";
+    String json = makeStateJSON(backlog, 0);
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
     TEST_ASSERT_TRUE(result);
-    TEST_ASSERT_EQUAL(20, checklist.items.size());  // Should truncate to max_items
+    TEST_ASSERT_EQUAL_INT(20, (int)list.items.size());
 }
 
-// Test toggle JSON creation
-void test_create_toggle_json() {
-    String json = createToggleJSON(42, true);
-    
-    TEST_ASSERT_TRUE(json.indexOf("\"id\":42") > 0);
-    TEST_ASSERT_TRUE(json.indexOf("\"checked\":true") > 0);
+// Malformed outer JSON should return false
+void test_parse_malformed_outer_json() {
+    String json = R"({"otta-backlog": "not closed)";
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
+    TEST_ASSERT_FALSE(result);
 }
 
-// Test optional fields (updated_at)
-void test_parse_optional_fields() {
-    String json = R"({
-        "title": "Minimal",
-        "items": [
-            {"id": 1, "text": "Task 1"}
-        ]
-    })";
-    
-    Checklist checklist;
-    bool result = parseChecklistJSON(json, checklist);
-    
-    TEST_ASSERT_TRUE(result);
-    TEST_ASSERT_EQUAL_STRING("", checklist.updated_at.c_str());
-    TEST_ASSERT_FALSE(checklist.items[0].checked);  // Should default to false
+// Malformed inner backlog string should return false
+void test_parse_malformed_backlog_json() {
+    // Outer is valid JSON but the backlog value is not a valid JSON array
+    String json = R"({"otta-backlog":"[{\"text\":\"broken\"","otta-streak":"0"})";
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
+    TEST_ASSERT_FALSE(result);
 }
+
+// Missing otta-streak key should default to 0
+void test_parse_missing_streak() {
+    String backlog = R"([{"text":"Task","difficulty":"medium"}])";
+    // Build outer without streak key
+    String escaped = backlog;
+    escaped.replace("\"", "\\\"");
+    String json = "{\"otta-backlog\":\"" + escaped + "\"}";
+
+    TaskList list;
+    bool result = parseStateJSON(json, list);
+
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_INT(0, list.streak);
+}
+
+// ============================================================================
+// Runner
+// ============================================================================
 
 void setup() {
     delay(2000);  // Wait for serial monitor
     UNITY_BEGIN();
-    
-    RUN_TEST(test_parse_valid_json);
-    RUN_TEST(test_parse_missing_title);
-    RUN_TEST(test_parse_malformed_json);
+
+    RUN_TEST(test_parse_valid_state);
+    RUN_TEST(test_parse_null_difficulty);
+    RUN_TEST(test_parse_missing_difficulty);
+    RUN_TEST(test_parse_empty_backlog);
+    RUN_TEST(test_parse_skips_empty_text);
     RUN_TEST(test_parse_truncate_items);
-    RUN_TEST(test_create_toggle_json);
-    RUN_TEST(test_parse_optional_fields);
-    
+    RUN_TEST(test_parse_malformed_outer_json);
+    RUN_TEST(test_parse_malformed_backlog_json);
+    RUN_TEST(test_parse_missing_streak);
+
     UNITY_END();
 }
 
