@@ -1,6 +1,6 @@
 /**
  * @file main.cpp
- * @brief E-ink checklist display - main entry point
+ * @brief E-ink task display - main entry point
  * 
  * Dual-hardware support:
  * - Waveshare 4.26" (800x480) SPI e-paper + ESP32 driver board
@@ -46,7 +46,7 @@
 // Global State
 // ============================================================================
 
-Checklist checklist;
+TaskList taskList;
 WiFiManager wifiManager;
 
 RTC_DATA_ATTR int bootCount = 0;
@@ -58,8 +58,8 @@ RTC_DATA_ATTR uint64_t lastUpdateTime = 0;
 
 void setupDisplay();
 void setupWiFi();
-void fetchChecklist();
-void renderChecklist();
+void fetchTaskList();
+void renderTaskList();
 void enterDeepSleep(uint64_t sleepTimeSeconds);
 uint16_t readBatteryVoltage();
 void handleTouch();
@@ -127,15 +127,15 @@ void setup() {
   }
   #endif
   
-  // Fetch new checklist data from server
+  // Fetch new task list data from server
   if (shouldUpdate) {
     setupWiFi();
-    fetchChecklist();
+    fetchTaskList();
     wifiManager.disconnect();
   }
   
-  // Render checklist to display
-  renderChecklist();
+  // Render task list to display
+  renderTaskList();
   
   // Enter deep sleep
   lastUpdateTime = millis();
@@ -204,30 +204,29 @@ void setupWiFi() {
 }
 
 // ============================================================================
-// Fetch Checklist from Server
+// Fetch Task List from Server
 // ============================================================================
 
-void fetchChecklist() {
+void fetchTaskList() {
   if (!wifiManager.isConnected()) {
     DEBUG_PRINTLN("No WiFi - skipping fetch");
     return;
   }
   
-  String url = String(SERVER_URL) + CHECKLIST_ENDPOINT;
-  DEBUG_PRINTF("Fetching checklist from: %s\n", url.c_str());
+  String url = String(SERVER_URL) + STATE_ENDPOINT;
+  DEBUG_PRINTF("Fetching task list from: %s\n", url.c_str());
   
   HttpResponse response = wifiManager.httpGet(url, HTTP_TIMEOUT_MS);
   
   if (response.success) {
     DEBUG_PRINTF("Received %d bytes\n", response.body.length());
     
-    // Parse JSON using checklist_model
-    if (parseChecklistJSON(response.body, checklist)) {
-      DEBUG_PRINTF("Parsed checklist: %s (%d items)\n", 
-                   checklist.title.c_str(), checklist.items.size());
+    if (parseStateJSON(response.body, taskList)) {
+      DEBUG_PRINTF("Parsed %d tasks, streak=%d\n",
+                   (int)taskList.items.size(), taskList.streak);
       lastUpdateTime = millis();
     } else {
-      DEBUG_PRINTLN("Failed to parse checklist JSON");
+      DEBUG_PRINTLN("Failed to parse state JSON");
     }
   } else {
     DEBUG_PRINTF("Fetch failed: %s\n", response.error.c_str());
@@ -235,10 +234,12 @@ void fetchChecklist() {
 }
 
 // ============================================================================
-// Render Checklist to Display
+// Render Task List to Display
 // ============================================================================
 
-void renderChecklist() {
+void renderTaskList() {
+  char buf[64];
+
   #if defined(HARDWARE_WAVESHARE)
     display.setFullWindow();
     display.firstPage();
@@ -246,28 +247,27 @@ void renderChecklist() {
     do {
       display.fillScreen(GxEPD_WHITE);
       
-      // Title
+      // Title with streak
+      snprintf(buf, sizeof(buf), "On Deck  Streak: %d", taskList.streak);
       display.setCursor(10, 30);
-      display.print("Checklist");
+      display.print(buf);
       
       // Items
-      for (uint8_t i = 0; i < checklist.items.size(); i++) {
+      for (uint8_t i = 0; i < taskList.items.size(); i++) {
         int16_t y = 70 + (i * ITEM_HEIGHT);
         
-        // Checkbox
+        // Checkbox (always unchecked — items are removed on completion)
         int16_t boxX = 10;
         int16_t boxY = y - CHECKBOX_SIZE + 5;
         display.drawRect(boxX, boxY, CHECKBOX_SIZE, CHECKBOX_SIZE, GxEPD_BLACK);
         
-        if (checklist.items[i].checked) {
-          // Draw X
-          display.drawLine(boxX + 5, boxY + 5, boxX + CHECKBOX_SIZE - 5, boxY + CHECKBOX_SIZE - 5, GxEPD_BLACK);
-          display.drawLine(boxX + CHECKBOX_SIZE - 5, boxY + 5, boxX + 5, boxY + CHECKBOX_SIZE - 5, GxEPD_BLACK);
+        // Text with optional difficulty tag
+        String label = taskList.items[i].text;
+        if (taskList.items[i].difficulty.length() > 0) {
+          label += " [" + taskList.items[i].difficulty + "]";
         }
-        
-        // Text
         display.setCursor(TEXT_MARGIN_LEFT, y);
-        display.print(checklist.items[i].text);
+        display.print(label);
       }
       
       // Battery indicator
@@ -284,31 +284,30 @@ void renderChecklist() {
     epd_poweron();
     epd_clear();
     
-    // Title
+    // Title with streak
+    snprintf(buf, sizeof(buf), "On Deck  Streak: %d", taskList.streak);
     int cursor_x = 20;
     int cursor_y = 50;
-    writeln((GFXfont *)&FiraSans, "Checklist", &cursor_x, &cursor_y, framebuffer);
+    writeln((GFXfont *)&FiraSans, buf, &cursor_x, &cursor_y, framebuffer);
     
     cursor_y += 30;
     
     // Items
-    for (uint8_t i = 0; i < checklist.items.size(); i++) {
+    for (uint8_t i = 0; i < taskList.items.size(); i++) {
       cursor_x = 20;
       
-      // Checkbox
+      // Checkbox (always unchecked — items are removed on completion)
       int boxX = cursor_x;
       int boxY = cursor_y - CHECKBOX_SIZE + 5;
       epd_draw_rect(boxX, boxY, CHECKBOX_SIZE, CHECKBOX_SIZE, 0x00, framebuffer);
       
-      if (checklist.items[i].checked) {
-        // Draw X
-        epd_draw_line(boxX + 5, boxY + 5, boxX + CHECKBOX_SIZE - 5, boxY + CHECKBOX_SIZE - 5, 0x00, framebuffer);
-        epd_draw_line(boxX + CHECKBOX_SIZE - 5, boxY + 5, boxX + 5, boxY + CHECKBOX_SIZE - 5, 0x00, framebuffer);
+      // Text with optional difficulty tag
+      String label = taskList.items[i].text;
+      if (taskList.items[i].difficulty.length() > 0) {
+        label += " [" + taskList.items[i].difficulty + "]";
       }
-      
-      // Text
       cursor_x = TEXT_MARGIN_LEFT;
-      write_string((GFXfont *)&FiraSans, checklist.items[i].text.c_str(), &cursor_x, &cursor_y, framebuffer);
+      write_string((GFXfont *)&FiraSans, label.c_str(), &cursor_x, &cursor_y, framebuffer);
       
       cursor_y += ITEM_HEIGHT;
     }
@@ -341,19 +340,17 @@ void handleTouch() {
       TP_Point t = touch.points[0];
       DEBUG_PRINTF("Touch: x=%d, y=%d\n", t.x, t.y);
       
-      // Determine which checklist item was touched
-      for (uint8_t i = 0; i < checklist.items.size(); i++) {
+      // Determine which task item was touched
+      for (uint8_t i = 0; i < taskList.items.size(); i++) {
         int16_t itemY = 70 + (i * ITEM_HEIGHT);
         int16_t boxY = itemY - CHECKBOX_SIZE + 5;
         
         if (t.y >= boxY && t.y <= (boxY + CHECKBOX_SIZE)) {
-          // Toggle checkbox
-          checklist.items[i].checked = !checklist.items[i].checked;
-          DEBUG_PRINTF("Toggled item %d: %s\n", i, checklist.items[i].checked ? "checked" : "unchecked");
+          DEBUG_PRINTF("Touched item %d: %s\n", i, taskList.items[i].text.c_str());
           
-          // TODO: Send toggle to server
-          // For now, just update display with partial refresh
-          renderChecklist();
+          // TODO: remove item from taskList, PUT updated otta-backlog to /tasks/api/list/otta-backlog
+          // For now, just re-render the display
+          renderTaskList();
           break;
         }
       }

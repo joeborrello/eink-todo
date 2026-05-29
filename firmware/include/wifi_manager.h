@@ -8,6 +8,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include "config.h"
 
@@ -78,6 +79,15 @@ public:
      * @return HttpResponse structure with result
      */
     HttpResponse httpPost(const String& url, const String& jsonPayload, uint32_t timeoutMs = 5000);
+
+    /**
+     * @brief Perform HTTP PUT request
+     * @param url Target URL
+     * @param rawBody Raw body to send
+     * @param timeoutMs Request timeout in milliseconds (default: 10000)
+     * @return HttpResponse structure with result
+     */
+    HttpResponse httpPut(const String& url, const String& rawBody, uint32_t timeoutMs = 10000);
 
 private:
     WiFiState state;
