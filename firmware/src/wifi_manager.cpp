@@ -119,7 +119,7 @@ HttpResponse WiFiManager::httpGet(const String& url, uint32_t timeoutMs) {
 
     // Add headers
     http.addHeader("Accept", "application/json");
-    http.addHeader("User-Agent", "ESP32-Checklist/1.0");
+    http.addHeader("User-Agent", "ESP32-TaskDisplay/1.0");
 
     // Perform request
     int httpCode = http.GET();
@@ -180,7 +180,7 @@ HttpResponse WiFiManager::httpPost(const String& url, const String& jsonPayload,
 
     // Add headers
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("User-Agent", "ESP32-Checklist/1.0");
+    http.addHeader("User-Agent", "ESP32-TaskDisplay/1.0");
 
     // Perform request
     int httpCode = http.POST(jsonPayload);
@@ -240,7 +240,7 @@ HttpResponse WiFiManager::httpPut(const String& url, const String& rawBody, uint
 
     // Add headers
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("User-Agent", "ESP32-Checklist/1.0");
+    http.addHeader("User-Agent", "ESP32-TaskDisplay/1.0");
 
     // Perform request
     int httpCode = http.PUT(rawBody);
