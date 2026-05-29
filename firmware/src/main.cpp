@@ -27,9 +27,9 @@
   #include <GxEPD2_BW.h>
   #include <Fonts/FreeMonoBold12pt7b.h>
   
-  // GxEPD2 driver for Waveshare 4.26" (GDEY042T81)
-  GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(
-    GxEPD2_420(/*CS=*/EPD_CS, /*DC=*/EPD_DC, /*RST=*/EPD_RST, /*BUSY=*/EPD_BUSY)
+  // GxEPD2 driver for Waveshare 4.26" (GDEQ0426T82, SSD1677, 800x480)
+  GxEPD2_BW<GxEPD2_426_GDEQ0426T82, GxEPD2_426_GDEQ0426T82::HEIGHT> display(
+    GxEPD2_426_GDEQ0426T82(/*CS=*/EPD_CS, /*DC=*/EPD_DC, /*RST=*/EPD_RST, /*BUSY=*/EPD_BUSY)
   );
 
 #elif defined(HARDWARE_LILYGO_T5)

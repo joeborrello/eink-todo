@@ -130,10 +130,10 @@ Update entire checklist (for server-side management).
 
 ## Troubleshooting
 
-### Build fails with "GxEPD2_420 not found"
-The GxEPD2 library auto-detects display types. If your Waveshare display uses a different controller, check the datasheet and update `main.cpp`:
+### Build fails with "GxEPD2_426_GDEQ0426T82 not found"
+The GxEPD2 library must be v1.5.3 or later for 4.26" support. If your display uses a different panel, check the datasheet and update `main.cpp`:
 ```cpp
-// Replace GxEPD2_420 with your controller (e.g., GxEPD2_426, GxEPD2_420_M01)
+// Replace GxEPD2_426_GDEQ0426T82 with your controller (e.g., GxEPD2_420_GDEY042T81 for 4.2")
 ```
 
 ### LILYGO framebuffer allocation fails
