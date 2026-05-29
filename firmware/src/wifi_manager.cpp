@@ -89,35 +89,45 @@ HttpResponse WiFiManager::httpGet(const String& url, uint32_t timeoutMs) {
     HttpResponse response;
     response.success = false;
     response.statusCode = 0;
-    
+
     if (!isConnected()) {
         response.error = "WiFi not connected";
         Serial.println("[HTTP] Error: WiFi not connected");
         return response;
     }
-    
+
     HTTPClient http;
     http.setTimeout(timeoutMs);
-    
+
     Serial.printf("[HTTP] GET %s\n", url.c_str());
-    
-    if (!http.begin(url)) {
+
+    bool begun = false;
+    WiFiClientSecure secureClient;
+    if (url.startsWith("https://")) {
+        // TODO: pin root CA cert for production use
+        secureClient.setInsecure();
+        begun = http.begin(secureClient, url);
+    } else {
+        begun = http.begin(url);
+    }
+
+    if (!begun) {
         response.error = "Failed to begin HTTP connection";
         Serial.println("[HTTP] Error: Failed to begin connection");
         return response;
     }
-    
+
     // Add headers
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("User-Agent", "ESP32-Checklist/1.0");
-    
+    http.addHeader("Accept", "application/json");
+    http.addHeader("User-Agent", "ESP32-TaskDisplay/1.0");
+
     // Perform request
     int httpCode = http.GET();
     response.statusCode = httpCode;
-    
+
     if (httpCode > 0) {
         Serial.printf("[HTTP] Response code: %d\n", httpCode);
-        
+
         if (httpCode == HTTP_CODE_OK) {
             response.body = http.getString();
             response.success = true;
@@ -130,7 +140,7 @@ HttpResponse WiFiManager::httpGet(const String& url, uint32_t timeoutMs) {
         response.error = http.errorToString(httpCode);
         Serial.printf("[HTTP] Request failed: %s\n", response.error.c_str());
     }
-    
+
     http.end();
     return response;
 }
@@ -139,36 +149,46 @@ HttpResponse WiFiManager::httpPost(const String& url, const String& jsonPayload,
     HttpResponse response;
     response.success = false;
     response.statusCode = 0;
-    
+
     if (!isConnected()) {
         response.error = "WiFi not connected";
         Serial.println("[HTTP] Error: WiFi not connected");
         return response;
     }
-    
+
     HTTPClient http;
     http.setTimeout(timeoutMs);
-    
+
     Serial.printf("[HTTP] POST %s\n", url.c_str());
     Serial.printf("[HTTP] Payload: %s\n", jsonPayload.c_str());
-    
-    if (!http.begin(url)) {
+
+    bool begun = false;
+    WiFiClientSecure secureClient;
+    if (url.startsWith("https://")) {
+        // TODO: pin root CA cert for production use
+        secureClient.setInsecure();
+        begun = http.begin(secureClient, url);
+    } else {
+        begun = http.begin(url);
+    }
+
+    if (!begun) {
         response.error = "Failed to begin HTTP connection";
         Serial.println("[HTTP] Error: Failed to begin connection");
         return response;
     }
-    
+
     // Add headers
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("User-Agent", "ESP32-Checklist/1.0");
-    
+    http.addHeader("User-Agent", "ESP32-TaskDisplay/1.0");
+
     // Perform request
     int httpCode = http.POST(jsonPayload);
     response.statusCode = httpCode;
-    
+
     if (httpCode > 0) {
         Serial.printf("[HTTP] Response code: %d\n", httpCode);
-        
+
         if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
             response.body = http.getString();
             response.success = true;
@@ -181,7 +201,67 @@ HttpResponse WiFiManager::httpPost(const String& url, const String& jsonPayload,
         response.error = http.errorToString(httpCode);
         Serial.printf("[HTTP] Request failed: %s\n", response.error.c_str());
     }
-    
+
+    http.end();
+    return response;
+}
+
+HttpResponse WiFiManager::httpPut(const String& url, const String& rawBody, uint32_t timeoutMs) {
+    HttpResponse response;
+    response.success = false;
+    response.statusCode = 0;
+
+    if (!isConnected()) {
+        response.error = "WiFi not connected";
+        Serial.println("[HTTP] Error: WiFi not connected");
+        return response;
+    }
+
+    HTTPClient http;
+    http.setTimeout(timeoutMs);
+
+    Serial.printf("[HTTP] PUT %s\n", url.c_str());
+
+    bool begun = false;
+    WiFiClientSecure secureClient;
+    if (url.startsWith("https://")) {
+        // TODO: pin root CA cert for production use
+        secureClient.setInsecure();
+        begun = http.begin(secureClient, url);
+    } else {
+        begun = http.begin(url);
+    }
+
+    if (!begun) {
+        response.error = "Failed to begin HTTP connection";
+        Serial.println("[HTTP] Error: Failed to begin connection");
+        return response;
+    }
+
+    // Add headers
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("User-Agent", "ESP32-TaskDisplay/1.0");
+
+    // Perform request
+    int httpCode = http.PUT(rawBody);
+    response.statusCode = httpCode;
+
+    if (httpCode > 0) {
+        Serial.printf("[HTTP] Response code: %d\n", httpCode);
+
+        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
+            response.body = http.getString();
+            response.success = true;
+            Serial.printf("[HTTP] Received %d bytes\n", response.body.length());
+        } else {
+            response.error = "HTTP error: " + String(httpCode);
+            Serial.printf("[HTTP] Error: %s\n", response.error.c_str());
+        }
+    } else {
+        response.error = http.errorToString(httpCode);
+        Serial.printf("[HTTP] Request failed: %s\n", response.error.c_str());
+    }
+
     http.end();
     return response;
 }

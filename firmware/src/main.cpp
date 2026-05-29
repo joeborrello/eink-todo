@@ -1,14 +1,18 @@
 /**
  * @file main.cpp
- * @brief E-ink checklist display - main entry point
- * 
+ * @brief E-ink task display - main entry point
+ *
  * Dual-hardware support:
  * - Waveshare 4.26" (800x480) SPI e-paper + ESP32 driver board
  * - LILYGO T5 4.7" (960x540) parallel e-paper + capacitive touch
+ *
+ * Data source: GET https://droplet.josephborrello.com/tasks/api/state
+ * Response is a flat KV object where every value is a JSON-encoded string.
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
@@ -23,9 +27,9 @@
   #include <GxEPD2_BW.h>
   #include <Fonts/FreeMonoBold12pt7b.h>
   
-  // GxEPD2 driver for Waveshare 4.26" (GDEY042T81)
-  GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(
-    GxEPD2_420(/*CS=*/EPD_CS, /*DC=*/EPD_DC, /*RST=*/EPD_RST, /*BUSY=*/EPD_BUSY)
+  // GxEPD2 driver for Waveshare 4.26" (GDEQ0426T82, SSD1677, 800x480)
+  GxEPD2_BW<GxEPD2_426_GDEQ0426T82, GxEPD2_426_GDEQ0426T82::HEIGHT> display(
+    GxEPD2_426_GDEQ0426T82(/*CS=*/EPD_CS, /*DC=*/EPD_DC, /*RST=*/EPD_RST, /*BUSY=*/EPD_BUSY)
   );
 
 #elif defined(HARDWARE_LILYGO_T5)
@@ -46,7 +50,7 @@
 // Global State
 // ============================================================================
 
-Checklist checklist;
+TaskList taskList;
 WiFiManager wifiManager;
 
 RTC_DATA_ATTR int bootCount = 0;
@@ -58,8 +62,8 @@ RTC_DATA_ATTR uint64_t lastUpdateTime = 0;
 
 void setupDisplay();
 void setupWiFi();
-void fetchChecklist();
-void renderChecklist();
+void fetchTaskList();
+void renderTaskList();
 void enterDeepSleep(uint64_t sleepTimeSeconds);
 uint16_t readBatteryVoltage();
 void handleTouch();
@@ -127,15 +131,15 @@ void setup() {
   }
   #endif
   
-  // Fetch new checklist data from server
+  // Fetch new task list data from server
   if (shouldUpdate) {
     setupWiFi();
-    fetchChecklist();
+    fetchTaskList();
     wifiManager.disconnect();
   }
-  
-  // Render checklist to display
-  renderChecklist();
+
+  // Render task list to display
+  renderTaskList();
   
   // Enter deep sleep
   lastUpdateTime = millis();
@@ -204,30 +208,29 @@ void setupWiFi() {
 }
 
 // ============================================================================
-// Fetch Checklist from Server
+// Fetch Task List from Server
 // ============================================================================
 
-void fetchChecklist() {
+void fetchTaskList() {
   if (!wifiManager.isConnected()) {
     DEBUG_PRINTLN("No WiFi - skipping fetch");
     return;
   }
-  
-  String url = String(SERVER_URL) + CHECKLIST_ENDPOINT;
-  DEBUG_PRINTF("Fetching checklist from: %s\n", url.c_str());
-  
+
+  String url = String(SERVER_URL) + STATE_ENDPOINT;
+  DEBUG_PRINTF("Fetching task list from: %s\n", url.c_str());
+
   HttpResponse response = wifiManager.httpGet(url, HTTP_TIMEOUT_MS);
-  
+
   if (response.success) {
     DEBUG_PRINTF("Received %d bytes\n", response.body.length());
-    
-    // Parse JSON using checklist_model
-    if (parseChecklistJSON(response.body, checklist)) {
-      DEBUG_PRINTF("Parsed checklist: %s (%d items)\n", 
-                   checklist.title.c_str(), checklist.items.size());
+
+    if (parseStateJSON(response.body, taskList)) {
+      DEBUG_PRINTF("Parsed %d tasks, streak=%d\n",
+                   (int)taskList.items.size(), taskList.streak);
       lastUpdateTime = millis();
     } else {
-      DEBUG_PRINTLN("Failed to parse checklist JSON");
+      DEBUG_PRINTLN("Failed to parse state JSON");
     }
   } else {
     DEBUG_PRINTF("Fetch failed: %s\n", response.error.c_str());
@@ -235,84 +238,84 @@ void fetchChecklist() {
 }
 
 // ============================================================================
-// Render Checklist to Display
+// Render Task List to Display
 // ============================================================================
 
-void renderChecklist() {
+void renderTaskList() {
+  char buf[64];
+
   #if defined(HARDWARE_WAVESHARE)
     display.setFullWindow();
     display.firstPage();
-    
+
     do {
       display.fillScreen(GxEPD_WHITE);
-      
-      // Title
+
+      // Header: title + streak counter
+      snprintf(buf, sizeof(buf), "On Deck  Streak: %d", taskList.streak);
       display.setCursor(10, 30);
-      display.print("Checklist");
-      
+      display.print(buf);
+
       // Items
-      for (uint8_t i = 0; i < checklist.items.size(); i++) {
+      for (uint8_t i = 0; i < taskList.items.size(); i++) {
         int16_t y = 70 + (i * ITEM_HEIGHT);
-        
-        // Checkbox
+
+        // Checkbox (always unchecked — no checked state from server yet)
         int16_t boxX = 10;
         int16_t boxY = y - CHECKBOX_SIZE + 5;
         display.drawRect(boxX, boxY, CHECKBOX_SIZE, CHECKBOX_SIZE, GxEPD_BLACK);
-        
-        if (checklist.items[i].checked) {
-          // Draw X
-          display.drawLine(boxX + 5, boxY + 5, boxX + CHECKBOX_SIZE - 5, boxY + CHECKBOX_SIZE - 5, GxEPD_BLACK);
-          display.drawLine(boxX + CHECKBOX_SIZE - 5, boxY + 5, boxX + 5, boxY + CHECKBOX_SIZE - 5, GxEPD_BLACK);
+
+        // Text + optional difficulty tag
+        String line = taskList.items[i].text;
+        if (taskList.items[i].difficulty.length() > 0) {
+          line += " [" + taskList.items[i].difficulty + "]";
         }
-        
-        // Text
         display.setCursor(TEXT_MARGIN_LEFT, y);
-        display.print(checklist.items[i].text);
+        display.print(line);
       }
-      
+
       // Battery indicator
       uint16_t battMv = readBatteryVoltage();
       display.setCursor(650, 30);
       display.printf("%dmV", battMv);
-      
+
     } while (display.nextPage());
-    
+
     // Power off display
     digitalWrite(EPD_PWR, LOW);
-    
+
   #elif defined(HARDWARE_LILYGO_T5)
     epd_poweron();
     epd_clear();
-    
-    // Title
+
+    // Header: title + streak counter
+    snprintf(buf, sizeof(buf), "On Deck  Streak: %d", taskList.streak);
     int cursor_x = 20;
     int cursor_y = 50;
-    writeln((GFXfont *)&FiraSans, "Checklist", &cursor_x, &cursor_y, framebuffer);
-    
+    writeln((GFXfont *)&FiraSans, buf, &cursor_x, &cursor_y, framebuffer);
+
     cursor_y += 30;
-    
+
     // Items
-    for (uint8_t i = 0; i < checklist.items.size(); i++) {
+    for (uint8_t i = 0; i < taskList.items.size(); i++) {
       cursor_x = 20;
-      
-      // Checkbox
+
+      // Checkbox (always unchecked — no checked state from server yet)
       int boxX = cursor_x;
       int boxY = cursor_y - CHECKBOX_SIZE + 5;
       epd_draw_rect(boxX, boxY, CHECKBOX_SIZE, CHECKBOX_SIZE, 0x00, framebuffer);
-      
-      if (checklist.items[i].checked) {
-        // Draw X
-        epd_draw_line(boxX + 5, boxY + 5, boxX + CHECKBOX_SIZE - 5, boxY + CHECKBOX_SIZE - 5, 0x00, framebuffer);
-        epd_draw_line(boxX + CHECKBOX_SIZE - 5, boxY + 5, boxX + 5, boxY + CHECKBOX_SIZE - 5, 0x00, framebuffer);
+
+      // Text + optional difficulty tag
+      String line = taskList.items[i].text;
+      if (taskList.items[i].difficulty.length() > 0) {
+        line += " [" + taskList.items[i].difficulty + "]";
       }
-      
-      // Text
       cursor_x = TEXT_MARGIN_LEFT;
-      write_string((GFXfont *)&FiraSans, checklist.items[i].text.c_str(), &cursor_x, &cursor_y, framebuffer);
-      
+      write_string((GFXfont *)&FiraSans, line.c_str(), &cursor_x, &cursor_y, framebuffer);
+
       cursor_y += ITEM_HEIGHT;
     }
-    
+
     // Battery indicator
     uint16_t battMv = readBatteryVoltage();
     cursor_x = EPD_WIDTH - 150;
@@ -320,12 +323,12 @@ void renderChecklist() {
     char battStr[16];
     snprintf(battStr, sizeof(battStr), "%dmV", battMv);
     write_string((GFXfont *)&FiraSans, battStr, &cursor_x, &cursor_y, framebuffer);
-    
+
     // Draw framebuffer to display
     epd_draw_grayscale_image(epd_full_screen(), framebuffer);
     epd_poweroff();
   #endif
-  
+
   DEBUG_PRINTLN("Display updated");
 }
 
@@ -341,19 +344,37 @@ void handleTouch() {
       TP_Point t = touch.points[0];
       DEBUG_PRINTF("Touch: x=%d, y=%d\n", t.x, t.y);
       
-      // Determine which checklist item was touched
-      for (uint8_t i = 0; i < checklist.items.size(); i++) {
+      // Determine which task item was touched
+      for (uint8_t i = 0; i < taskList.items.size(); i++) {
         int16_t itemY = 70 + (i * ITEM_HEIGHT);
         int16_t boxY = itemY - CHECKBOX_SIZE + 5;
-        
+
         if (t.y >= boxY && t.y <= (boxY + CHECKBOX_SIZE)) {
-          // Toggle checkbox
-          checklist.items[i].checked = !checklist.items[i].checked;
-          DEBUG_PRINTF("Toggled item %d: %s\n", i, checklist.items[i].checked ? "checked" : "unchecked");
-          
-          // TODO: Send toggle to server
-          // For now, just update display with partial refresh
-          renderChecklist();
+          DEBUG_PRINTF("Touched item %d: %s\n", i, taskList.items[i].text.c_str());
+
+          // Remove the tapped item from the local list
+          taskList.items.erase(taskList.items.begin() + i);
+
+          // Reconnect WiFi and push the updated backlog to the server
+          setupWiFi();
+          if (wifiManager.isConnected()) {
+            String body = createBacklogJSON(taskList);
+            String url  = String(SERVER_URL) + LIST_ENDPOINT_PREFIX + "otta-backlog";
+            DEBUG_PRINTF("PUT %s  body=%s\n", url.c_str(), body.c_str());
+
+            HttpResponse resp = wifiManager.httpPut(url, body, HTTP_TIMEOUT_MS);
+            if (resp.success) {
+              DEBUG_PRINTLN("Backlog updated on server");
+            } else {
+              DEBUG_PRINTF("PUT failed: %s\n", resp.error.c_str());
+            }
+            wifiManager.disconnect();
+          } else {
+            DEBUG_PRINTLN("No WiFi — backlog update skipped");
+          }
+
+          // Re-render with the item removed
+          renderTaskList();
           break;
         }
       }

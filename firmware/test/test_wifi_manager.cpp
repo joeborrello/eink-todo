@@ -54,13 +54,13 @@ void test_wifi_disconnect(void) {
 void test_http_get_success(void) {
     wifiManager.connect(3, 10000);
     
-    String url = String(SERVER_URL) + CHECKLIST_ENDPOINT;
+    String url = String(SERVER_URL) + HEALTH_ENDPOINT;
     HttpResponse response = wifiManager.httpGet(url, 5000);
     
     TEST_ASSERT_TRUE(response.success);
     TEST_ASSERT_EQUAL(200, response.statusCode);
     TEST_ASSERT_GREATER_THAN(0, response.body.length());
-    TEST_ASSERT_TRUE(response.body.indexOf("title") > 0);  // Should contain JSON
+    TEST_ASSERT_TRUE(response.body.indexOf("ok") > 0);  // {"ok": true}
 }
 
 void test_http_get_invalid_url(void) {
@@ -72,16 +72,16 @@ void test_http_get_invalid_url(void) {
     TEST_ASSERT_NOT_EQUAL(200, response.statusCode);
 }
 
-void test_http_post_success(void) {
+void test_http_get_state(void) {
     wifiManager.connect(3, 10000);
     
-    String url = String(SERVER_URL) + TOGGLE_ENDPOINT;
-    String payload = "{\"item_id\":0}";
-    
-    HttpResponse response = wifiManager.httpPost(url, payload, 5000);
+    String url = String(SERVER_URL) + STATE_ENDPOINT;
+    HttpResponse response = wifiManager.httpGet(url, 10000);
     
     TEST_ASSERT_TRUE(response.success);
-    TEST_ASSERT_TRUE(response.statusCode == 200 || response.statusCode == 201);
+    TEST_ASSERT_EQUAL(200, response.statusCode);
+    TEST_ASSERT_GREATER_THAN(0, response.body.length());
+    TEST_ASSERT_TRUE(response.body.indexOf("otta-backlog") > 0);  // Should contain state keys
 }
 
 void test_http_without_wifi(void) {
@@ -127,7 +127,7 @@ void setup() {
     // HTTP tests
     RUN_TEST(test_http_get_success);
     RUN_TEST(test_http_get_invalid_url);
-    RUN_TEST(test_http_post_success);
+    RUN_TEST(test_http_get_state);
     RUN_TEST(test_http_without_wifi);
     
     // Retry tests
